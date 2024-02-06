@@ -110,6 +110,33 @@ class ConvolutionBasedInflationBlock(nn.Module):
 
 
 class AttentionBasedInflationBlock(nn.Module):
+    """
+    Attention-based inflation block module.
+
+    Args:
+        dim (int): The input dimension.
+        heads (int): The number of attention heads.
+        dropout (float, optional): The dropout rate. Defaults to 0.1.
+
+    Attributes:
+        dim (int): The input dimension.
+        heads (int): The number of attention heads.
+        dropout (float): The dropout rate.
+        attn (SpatialLinearAttention): The spatial linear attention module.
+        proj (nn.Linear): The linear projection layer.
+        norm (nn.LayerNorm): The layer normalization module.
+        
+    Example:
+        >>> import torch 
+        >>> from lumiere.model import AttentionBasedInflationBlock
+        >>> x = torch.randn(1, 4, 224, 224, 512)
+        >>> model = AttentionBasedInflationBlock(dim=512, heads=4, dropout=0.1)
+        >>> out = model(x)
+        >>> print(out.shape)
+        torch.Size([1, 4, 224, 224, 512])
+
+    """
+
     def __init__(
         self,
         dim: int,
@@ -124,7 +151,7 @@ class AttentionBasedInflationBlock(nn.Module):
         self.dropout = dropout
 
         # Spatial linear attention for videos of size: 
-        #batch_size, channels, frames, height, width).
+        # batch_size, channels, frames, height, width.
         self.attn = SpatialLinearAttention(
             dim,
             heads,
@@ -138,6 +165,16 @@ class AttentionBasedInflationBlock(nn.Module):
         self.norm = nn.LayerNorm(dim)
 
     def forward(self, x: Tensor):
+        """
+        Forward pass of the AttentionBasedInflationBlock.
+
+        Args:
+            x (Tensor): The input tensor.
+
+        Returns:
+            Tensor: The output tensor.
+
+        """
         skip = x
         b, t, h, w, d = x.shape
         
@@ -147,8 +184,10 @@ class AttentionBasedInflationBlock(nn.Module):
         # Apply spatial linear attention
         x = self.attn(x)
 
+        # Reshape back to the original shape
+        x = rearrange(x, "b d t h w -> b t h w d")
+        
         # Linear projection
-        # x = self.proj(x)
-        # x = self.norm(x)
+        x = nn.Linear(d, d)(x)
 
-        return x #+ skip
+        return x + skip

@@ -1,11 +1,24 @@
 import torch
 from lumiere.model import ConvolutionBasedInflationBlock
 
-# Example usage:
-# scale_factor must be a divisor of T, H, and W for the example to work correctly
+
+# B, T, H, W, C
+x = torch.randn(1, 2, 112, 112, 3)
+
+# Create a ConvolutionBasedInflationBlock
 block = ConvolutionBasedInflationBlock(
-    3, 64, (3, 3), (2, 2), (1, 1), scale_factor=2
+    in_channels=3,
+    out_channels=64,
+    kernel_size=(3, 3),
+    stride=1,
+    padding=1,
+    scale_factor=2,
 )
-x = torch.randn(1, 4, 224, 224, 3)
+
+
+# Pass the input tensor through the block
 out = block(x)
-print(out.shape)  # Expected shape: [1, 2, 112, 112, 64]
+
+
+# Print the output shape
+print(out.shape)
