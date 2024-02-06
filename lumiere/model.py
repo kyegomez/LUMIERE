@@ -1,9 +1,6 @@
 from einops import rearrange
-from torch import nn, Tensor
+from torch import Tensor, nn
 from zeta.nn.attention import SpatialLinearAttention
-
-from einops import rearrange
-from torch import nn, Tensor
 
 
 class ConvolutionBasedInflationBlock(nn.Module):
