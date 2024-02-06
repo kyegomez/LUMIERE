@@ -1,24 +1,22 @@
 import torch
 from lumiere.model import ConvolutionBasedInflationBlock
 
+# B, T, H, W, D
+x = torch.randn(1, 4, 224, 224, 512)
 
-# B, T, H, W, C
-x = torch.randn(1, 2, 112, 112, 3)
-
-# Create a ConvolutionBasedInflationBlock
-block = ConvolutionBasedInflationBlock(
-    in_channels=3,
-    out_channels=64,
-    kernel_size=(3, 3),
+# Create the model
+model = ConvolutionBasedInflationBlock(
+    in_channels=512,
+    out_channels=512,
+    kernel_size=3,
     stride=1,
     padding=1,
     scale_factor=2,
 )
 
 
-# Pass the input tensor through the block
-out = block(x)
-
+# Forward pass
+out = model(x)
 
 # Print the output shape
 print(out.shape)
