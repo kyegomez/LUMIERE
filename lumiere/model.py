@@ -1,8 +1,8 @@
-from einops import rearrange, reduce
+from einops import rearrange
 from torch import nn, Tensor
 from zeta.nn.attention import SpatialLinearAttention
 
-from einops import rearrange, reduce
+from einops import rearrange
 from torch import nn, Tensor
 
 
@@ -125,9 +125,9 @@ class AttentionBasedInflationBlock(nn.Module):
         attn (SpatialLinearAttention): The spatial linear attention module.
         proj (nn.Linear): The linear projection layer.
         norm (nn.LayerNorm): The layer normalization module.
-        
+
     Example:
-        >>> import torch 
+        >>> import torch
         >>> from lumiere.model import AttentionBasedInflationBlock
         >>> x = torch.randn(1, 4, 224, 224, 512)
         >>> model = AttentionBasedInflationBlock(dim=512, heads=4, dropout=0.1)
@@ -150,7 +150,7 @@ class AttentionBasedInflationBlock(nn.Module):
         self.heads = heads
         self.dropout = dropout
 
-        # Spatial linear attention for videos of size: 
+        # Spatial linear attention for videos of size:
         # batch_size, channels, frames, height, width.
         self.attn = SpatialLinearAttention(
             dim,
@@ -177,16 +177,16 @@ class AttentionBasedInflationBlock(nn.Module):
         """
         skip = x
         b, t, h, w, d = x.shape
-        
+
         # Reshape to match the spatial linear attention module
         x = rearrange(x, "b t h w d -> b d t h w")
-        
+
         # Apply spatial linear attention
         x = self.attn(x)
 
         # Reshape back to the original shape
         x = rearrange(x, "b d t h w -> b t h w d")
-        
+
         # Linear projection
         x = nn.Linear(d, d)(x)
 
