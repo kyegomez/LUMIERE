@@ -1,5 +1,5 @@
 import torch
-from model import ConvolutionBasedInflationBlock
+from lumiere.model import ConvolutionBasedInflationBlock
 
 
 # B, T, H, W, C
