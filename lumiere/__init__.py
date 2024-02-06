@@ -1,4 +1,7 @@
-from lumiere.model import ConvolutionBasedInflationBlock, AttentionBasedInflationBlock
+from lumiere.model import (
+    ConvolutionBasedInflationBlock,
+    AttentionBasedInflationBlock,
+)
 
 
 __all__ = [
