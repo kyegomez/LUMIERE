@@ -49,10 +49,6 @@ class ConvolutionBasedInflationBlock(nn.Module):
         self.norm2d = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
-        # Linear projection layer
-        # This will be sized dynamically based on the output of the conv2d layer
-        self.linear = None
-
     def forward(self, x):
         # Input shape: (batch, time, height, width, dimensions)
         # Input shape: (batch, time, height, width, dimensions)
