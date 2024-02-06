@@ -1,6 +1,6 @@
 from einops import rearrange, reduce
 from torch import nn, Tensor
-from zeta.nn import MultiQueryAttention
+from zeta.nn.attention import SpatialLinearAttention
 
 from einops import rearrange, reduce
 from torch import nn, Tensor
@@ -9,8 +9,9 @@ from torch import nn, Tensor
 class ConvolutionBasedInflationBlock(nn.Module):
     """
     Implements a Convolution-based Inflation Block with fixed BatchNorm layers for normalization.
-    Uses einops.rearrange and reduce for tensor reshaping for clarity and conciseness.
-    Maintains the input tensor's shape, but scales the time, height, width, and dimensions.
+    Uses einops.rearrange for tensor reshaping for clarity and conciseness.
+    Maintains the input tensor's dimensions, but scales down the temporal (T),
+    height (H), and width (W) dimensions by a scale factor.
 
     Args:
         in_channels (int): Number of input channels.
@@ -18,14 +19,14 @@ class ConvolutionBasedInflationBlock(nn.Module):
         kernel_size (int or tuple): Size of the conv2d kernel.
         stride (int or tuple): Stride for the conv2d operation.
         padding (int or tuple): Padding for the conv2d operation.
-        scale_factor (int): Factor to scale the dimensions by.
+        scale_factor (int): Factor to scale down the T, H, and W dimensions by.
 
     Example:
         >>> block = ConvolutionBasedInflationBlock(3, 64, (3, 3), 1, 1, scale_factor=2)
         >>> x = torch.randn(1, 2, 224, 224, 3)
         >>> out = block(x)
         >>> out.shape
-        torch.Size([1, 2, 112, 112, 64])
+        torch.Size([1, 1, 112, 112, 64])
     """
 
     def __init__(
@@ -40,12 +41,10 @@ class ConvolutionBasedInflationBlock(nn.Module):
         super(ConvolutionBasedInflationBlock, self).__init__()
         self.scale_factor = scale_factor
 
-        # Assume kernel_size, stride, padding are tuples (for height and width)
         # Conv2d layer with BatchNorm2d and ReLU activation
         self.conv2d = nn.Conv2d(
-            in_channels
-            * scale_factor,  # Scale the in_channels by the scale factor
-            out_channels,
+            in_channels,  # Number of input channels
+            out_channels,  # Number of output channels
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
@@ -53,57 +52,58 @@ class ConvolutionBasedInflationBlock(nn.Module):
         self.norm2d = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
-        # Since we are scaling the input dimensions, we need to account for this in the number of output features
-        self.num_features_before_linear = (
-            out_channels * scale_factor * scale_factor
-        )
-
         # Linear projection layer
-        self.linear = nn.Linear(
-            self.num_features_before_linear,
-            out_channels * scale_factor,
-        )
+        # The number of features before the linear layer needs to be calculated dynamically based on the input size
+        self.linear = None
 
     def forward(self, x: Tensor):
         # Input shape: (batch, time, height, width, dimensions)
-        # The input x is expected to be a 5D Tensor
+        b, t, h, w, d = x.shape
 
-        # Combine batch and time dimensions and scale height and width
-        x = rearrange(
-            x,
-            "b t h w d -> (b t) (h w d)",
-            h=self.scale_factor,
-            w=self.scale_factor,
-        )
+        # Reshape input to combine the dimensions and time into the batch dimension for 2D convolution
+        x = rearrange(x, "b t h w d -> (b t) h w d")
 
         # Apply 2D convolution, normalization, and activation
-        x = self.conv2d(x)
+        x = self.conv2d(
+            x
+        )  # Shape after conv: (batch*time, out_channels, new_height, new_width)
         x = self.norm2d(x)
         x = self.relu(x)
 
-        # Reshape back to original batch and time dimensions and reduce height and width according to scale factor
+        # Calculate the new shape after the convolution
+        _, _, new_h, new_w = x.shape
+        new_t = t // self.scale_factor
+        new_h = new_h // self.scale_factor
+        new_w = new_w // self.scale_factor
+
+        # Check if linear layer has been defined, define it if not
+        if self.linear is None:
+            flattened_size = new_h * new_w * self.out_channels
+            self.linear = nn.Linear(
+                flattened_size, flattened_size // self.scale_factor
+            ).to(x.device)
+
+        # Reshape x to collapse the output H and W dimensions and uncollapse the batch and time dimensions
         x = rearrange(
             x,
-            "(b t) c h w -> b t (h h_scale) (w w_scale) c",
-            b=x.size(0) // self.scale_factor,
-            t=self.scale_factor,
-            h_scale=1 / self.scale_factor,
-            w_scale=1 / self.scale_factor,
+            "(b t) c h w -> b (t h w c)",
+            b=b,
+            t=new_t,
+            h=new_h,
+            w=new_w,
         )
 
-        # Flatten the output for linear projection
-        x = reduce(x, "b t h w c -> b t (h w c)", "sum")
-
-        # Apply linear projection to scale dimensions back to original
+        # Apply the linear projection
         x = self.linear(x)
 
-        # Reshape to match the input dimensions: (batch, time, height, width, dimensions)
+        # Reshape x to the original dimensions with scaled T, H, and W
         x = rearrange(
             x,
-            "b t (h w d) -> b t h w d",
-            h=x.size(2) // (self.scale_factor * self.out_channels),
-            w=self.scale_factor,
-            d=self.out_channels,
+            "b (t h w c) -> b t h w c",
+            t=new_t,
+            h=new_h,
+            w=new_w,
+            c=self.out_channels,
         )
 
         return x
@@ -112,46 +112,43 @@ class ConvolutionBasedInflationBlock(nn.Module):
 class AttentionBasedInflationBlock(nn.Module):
     def __init__(
         self,
-        channels: int,
+        dim: int,
         heads: int,
         dropout: float = 0.1,
         *args,
         **kwargs,
     ):
         super().__init__()
-        self.channels = channels
+        self.dim = dim
         self.heads = heads
         self.dropout = dropout
 
-        # MultiQueryAttention layer
-        self.attn = MultiQueryAttention(
-            channels, heads, *args, **kwargs
+        # Spatial linear attention for videos of size: 
+        #batch_size, channels, frames, height, width).
+        self.attn = SpatialLinearAttention(
+            dim,
+            heads,
+            dim_head=dim // heads,
         )
 
         # Linear projection layer
-        self.proj = nn.Linear(channels, channels)
+        self.proj = nn.Linear(dim, dim)
 
         # Norm
-        self.norm = nn.LayerNorm(channels)
+        self.norm = nn.LayerNorm(dim)
 
     def forward(self, x: Tensor):
         skip = x
-        b, c, h, w = x.shape
-
-        # Reshape the input tensor for the attention layer
-        x = reduce(x, "b c h w -> b (h w) c", "mean")
-        x = print(f"X: {x.shape}")
-
-        # Attention
-        x, _, _ = self.attn(x, x, x)
-        print(f"X: {x.shape}")
-        x = self.norm(x)
+        b, t, h, w, d = x.shape
+        
+        # Reshape to match the spatial linear attention module
+        x = rearrange(x, "b t h w d -> b d t h w")
+        
+        # Apply spatial linear attention
+        x = self.attn(x)
 
         # Linear projection
-        x = self.proj(x)
-        x = self.norm(x)
+        # x = self.proj(x)
+        # x = self.norm(x)
 
-        # Reshape the output tensor
-        x = rearrange(x, "b (h w) c -> b c h w", h=h, w=w)
-
-        return x + skip
+        return x #+ skip
