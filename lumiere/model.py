@@ -17,7 +17,7 @@ class ConvolutionBasedInflationBlock(nn.Module):
         padding (int or tuple): Padding for the conv2d operation.
         scale_factor (int): Factor to divide the dimensions by.
 
-    Example:
+    Example:b
         >>> block = ConvolutionBasedInflationBlock(3, 64, (3, 3), 1, 1, scale_factor=2)
         >>> x = torch.randn(1, 2, 224, 224, 3)
         >>> out = block(x)
@@ -122,7 +122,7 @@ class AttentionBasedInflationBlock(nn.Module):
         dim (int): The input dimension.
         heads (int): The number of attention heads.
         dropout (float): The dropout rate.
-        attn (SpatialLinearAttention): The spatial linear attention module.
+        attn (SpatialLinearAttention): The spatial linear ablttention module.
         proj (nn.Linear): The linear projection layer.
         norm (nn.LayerNorm): The layer normalization module.
 
@@ -153,9 +153,7 @@ class AttentionBasedInflationBlock(nn.Module):
         # Spatial linear attention for videos of size:
         # batch_size, channels, frames, height, width.
         self.attn = SpatialLinearAttention(
-            dim,
-            heads,
-            dim_head=dim // heads,
+            dim, heads, dim_head=dim // heads, *args, **kwargs
         )
 
         # Linear projection layer

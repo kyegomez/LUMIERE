@@ -11,4 +11,4 @@ model = AttentionBasedInflationBlock(dim=512, heads=4, dropout=0.1)
 out = model(x)
 
 # print
-print(out.shape)  # Expected shape: [1, 4, 224, 224, 3]
+print(out.shape)
