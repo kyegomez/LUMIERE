@@ -28,7 +28,8 @@ zetascale = "*"
 einops = "*"
 torch = "*"
 
-
+[tool.pytest.ini_options]
+pythonpath = "tests"
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.6"
